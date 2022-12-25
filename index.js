@@ -1,15 +1,30 @@
-//Dependencies
+"use strict";
+
+// Dependencies
 const rra = require("recursive-readdir-async")
 const readLine = require("readline-sync")
 const columnify = require("columnify")
 const chalk = require("chalk")
 const path = require("path")
 const _ = require("lodash")
+const fs = require("fs")
 
-//Variables
+// Variables
 var rox = {
+    history: {
+        commands: []
+    },
     plugins: [],
     use: ">"
+}
+
+// Functions
+rox.log = function(type, message){
+    if(type === "i"){
+        console.log(`[${chalk.rgb(108, 153, 187)("!")}] ${message}`)
+    }else if(type === "e"){
+        console.log(`[${chalk.rgb(255, 0, 128)("!")}] ${message}`)
+    }
 }
 
 rox.randomBanner = function(){
@@ -36,6 +51,10 @@ rox.parsePlugins = async function(files){
     })
 }
 
+rox.loadCommands = function(){
+    rox.history.commands = JSON.parse(fs.readFileSync("./database/commands.json", "utf8"))
+}
+
 rox.useHandler = function(commandArgs, backType){
     if(!commandArgs[1]){
         console.log("Usage: use <plugin>")
@@ -50,7 +69,7 @@ rox.useHandler = function(commandArgs, backType){
     }
 
     if(!_.find(rox.plugins, { path: commandArgs[1] })){
-        console.log(`[${chalk.rgb(255, 0, 128)("!")}] Unable to use the plugin, please make sure It's valid.`)
+        rox.log("e", "Unable to use the plugin, please make sure It's valid.")
 
         if(backType == "navigation"){
             rox.navigation()
@@ -66,7 +85,7 @@ rox.useHandler = function(commandArgs, backType){
             rox.use = `${commandArgs[1]}>`
             rox.useNavigation(require(path.resolve(`${__dirname}\\plugins`, commandArgs[1], "main.js")).information(), commandArgs[1])
         }else{
-            console.log(`[${chalk.rgb(255, 0, 128)("!")}] Unable to use the plugin, please check If It's valid.`)
+            rox.log("e", "Unable to use the plugin, please check If It's valid.")
             rox.useNavigation(require(path.resolve(`${__dirname}\\plugins`, commandArgs[1], "main.js")).information(), commandArgs[1])
         }
     }else if(backType === "useNavigation"){
@@ -74,7 +93,7 @@ rox.useHandler = function(commandArgs, backType){
             rox.use = `${commandArgs[1]}>`
             rox.useNavigation(require(path.resolve(`${__dirname}\\plugins`, commandArgs[1], "main.js")).information(), commandArgs[1])
         }else{
-            console.log(`[${chalk.rgb(255, 0, 128)("!")}] Unable to use the plugin, please check If It's valid.`)
+            rox.log("e", "Unable to use the plugin, please check If It's valid.")
             rox.navigation()
         }
     }
@@ -113,7 +132,7 @@ rox.searchPlugins = function(commandArgs, callback, extra){
         }
     }
     if(!matchedPlugins.length){
-        console.log(`[${chalk.rgb(255, 0, 128)("!")}] No plugins found using the keyword you specified.`)
+        console.log("e", "No plugins found using the keyword you specified.")
         return rox.navigation()
     }
     
@@ -163,7 +182,7 @@ rox.listPlugins = function(callback, extra){
     const plugins = []
 
     if(!rox.plugins){
-        console.log(`[${chalk.rgb(255, 0, 128)("!")}] No loaded plugins found.`)
+        rox.log("e", "No loaded plugins found.")
         return callback(extra)
     }
 
@@ -217,6 +236,16 @@ rox.listPlugins = function(callback, extra){
     callback(extra)
 }
 
+rox.commandHistory = function(nC){
+    rox.history.commands.push(nC)
+
+    const data = JSON.parse(fs.readFileSync("./database/commands.json", "utf8"))
+
+    if(rox.history.commands.length) for( const command of rox.history.commands) data.push(command)
+
+    fs.writeFileSync("./database/commands.json", JSON.stringify(data), "utf8")
+}
+
 rox.useNavigation = function(pluginInformation){
     var options = pluginInformation.options
 
@@ -231,6 +260,8 @@ rox.useNavigation = function(pluginInformation){
     const command = readLine.question(`${chalk.rgb(122, 223, 242)("rox")} {${rox.use}} `)
     const commandArgs = command.split(" ")
 
+    rox.commandHistory(command)
+
     if(command === "help"){
         console.log(`
 Command             Description
@@ -238,6 +269,7 @@ Command             Description
 help                Help menu
 plugins             Show all loaded plugins.
 options             Show plugin options
+history             Show commands history.
 use                 Use specific plugin in plugins
 run                 Run the plugin with your settings
 set                 Set a value to the specific variable in the used plugin
@@ -246,8 +278,6 @@ clear               Clear the console
 exit                Exit Rox
         `)
         rox.useNavigation(pluginInformation)
-    }else if(command === "plugins"){
-        rox.listPlugins(rox.useNavigation, pluginInformation)
     }else if(command === "run"){
         var tempOptions = options
 
@@ -273,17 +303,17 @@ exit                Exit Rox
         }
 
         if(!commandArgs[2]){
-            console.log(`[${chalk.rgb(255, 0, 128)("!")}] Unable to set the value to the variable, please check if the variable is valid.`)
+            console.log("e", "Unable to set the value to the variable, please check if the variable is valid.")
             return rox.useNavigation(pluginInformation)
         }
 
         if(options[commandArgs[1]] !== undefined){
             options[commandArgs[1]] = commandArgs[2]
 
-            console.log(`[${chalk.rgb(108, 153, 187)("!")}] ${commandArgs[1]} => ${commandArgs[2]}`)
+            rox.log("i", `${commandArgs[1]} => ${commandArgs[2]}`)
             return rox.useNavigation(pluginInformation)
         }else{
-            console.log(`[${chalk.rgb(255, 0, 128)("!")}] Unable to set the value to the variable, please check if the variable is valid.`)
+            console.log("e", "Unable to set the value to the variable, please check if the variable is valid.")
             return rox.useNavigation(pluginInformation)
         }
     }else if(command === "options"){
@@ -318,15 +348,16 @@ exit                Exit Rox
     }else if(commandArgs[0] === "search"){
         rox.searchPlugins(commandArgs, rox.useNavigation, pluginInformation)
     }else{
-        console.log(`[${chalk.rgb(255, 0, 128)("!")}] Unknown command.`)
+        rox.log("e", "Unknown command.")
         rox.useNavigation(pluginInformation)
-        return
     }
 }
 
 rox.navigation = function(){
     const command = readLine.question(`${chalk.rgb(122, 223, 242)("rox")} {${rox.use}} `)
     const commandArgs = command.split(" ")
+
+    rox.commandHistory(command)
 
     if(command === "help"){
         console.log(`
@@ -340,11 +371,21 @@ clear               Clear the console
 exit                Exit Rox
         `)
         rox.navigation()
+    }else if(command === "history"){
+        if(!rox.history.commands.length){
+            console.log("e", "No logged commands found.")
+            return rox.navigation()
+        }
+
+        console.log()
+        for( const command in rox.history.commands ) console.log(`${+command+1}. ${rox.history.commands[command]}`)
+        console.log()
+    }else if(command === "plugins"){
+        rox.listPlugins(rox.useNavigation, pluginInformation)
     }else if(command === "plugins"){
         rox.listPlugins(rox.navigation)
     }else if(command === "clear"){
         console.clear()
-        rox.navigation()
     }else if(command === "exit"){
         console.clear()
         process.exit()
@@ -353,15 +394,17 @@ exit                Exit Rox
     }else if(commandArgs[0] === "search"){
         rox.searchPlugins(commandArgs, rox.navigation)
     }else{
-        console.log(`[${chalk.rgb(255, 0, 128)("!")}] Unknown command.`)
-        rox.navigation()
+        rox.log("e", "Unknown command.")
     }
+
+    rox.navigation()
 }
 
 rox.start = async function(){
     const files = await rra.list("./plugins", { realPath: true })
 
     await rox.parsePlugins(files)
+    rox.loadCommands()
 
     rox.randomBanner()
     rox.information()
@@ -370,5 +413,5 @@ rox.start = async function(){
     rox.navigation()
 }
 
-//Main
+// Main
 rox.start()
